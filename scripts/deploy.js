@@ -1,7 +1,7 @@
 async function main() {
   // We get the contract to deploy
   const WordToken = await ethers.getContractFactory("WordToken");
-  const wordToken = await WordToken.deploy(0);
+  const wordToken = await WordToken.deploy(1);
 
   console.log("WordToken deployed to:", wordToken.address);
 }

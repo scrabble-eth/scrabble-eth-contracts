@@ -35,17 +35,17 @@ contract WordToken is ERC721, VRFConsumerBase {
     uint256 seed;
 
     mapping(bytes32 => address) private requests;
-    mapping(bytes32 => uint256) private randomResult;
+    mapping(address => uint256) private randomResult;
 
     constructor(uint256 _seed)
         public
         ERC721("WordToken", "WTN")
         VRFConsumerBase(
-            0x8C7382F9D8f56b33781fE506E897a4F1e2d17255, // VRF Coordinator
-            0x326C977E6efc84E512bB9C30f76E30c160eD06FB // LINK Token
+            0xdD3782915140c8f3b190B5D67eAc6dc5760C46E9, // VRF Coordinator
+            0xa36085F69e2889c224210F603D836748e7dC0088 // LINK Token
         )
     {
-        keyHash = 0x6e75b569a01ef56d18cab6a8e71e6600d6ce853834d4a5748b720d06f878b3a4;
+        keyHash = 0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979cc4807b641f4;
         fee = 0.1 * 10**18; // 0.1 LINK
         seed = _seed;
         owner = msg.sender;
@@ -58,7 +58,7 @@ contract WordToken is ERC721, VRFConsumerBase {
         uint256 _count,
         uint16 _category
     ) public returns (bool) {
-        require(msg.sender = owner);
+        require(msg.sender == owner);
         words[_wordId] = _word;
         points[_wordId] = _points;
         availableCount[_wordId] = _count;
@@ -74,9 +74,9 @@ contract WordToken is ERC721, VRFConsumerBase {
     }
 
     function buyPack() public returns (bytes32 requestId) {
-        require(LINK.balanceOf(address(this)) >= fee, "Not enough LINK");
         requestId = requestRandomness(keyHash, fee, seed);
         requests[requestId] = msg.sender;
+        mintCards();
     }
 
     function expand(
@@ -98,13 +98,17 @@ contract WordToken is ERC721, VRFConsumerBase {
         internal
         override
     {
-        randomResult[requestId] = randomness;
-        uint256[] memory cardL1 = expand(randomness, 5, 1, L1Cards.length());
-        uint256[] memory cardL2 = expand(randomness, 3, 1, L2Cards.length());
-        uint256[] memory cardL3 = expand(randomness, 2, 1, L3Cards.length());
+        randomResult[requests[requestId]] = randomness;
+        delete requests[requestId];
+    }
+
+    function mintCards() private returns (bool) {
+        uint256[] memory cardL1 = expand(randomResult[msg.sender], 5, 1, L1Cards.length());
+        uint256[] memory cardL2 = expand(randomResult[msg.sender], 3, 1, L2Cards.length());
+        uint256[] memory cardL3 = expand(randomResult[msg.sender], 2, 1, L3Cards.length());
 
         for (uint16 i = 0; i < 5; i++) {
-            _safeMint(requests[requestId], wordCards.length);
+            _safeMint(msg.sender, wordCards.length);
             wordCards.push(
                 Word(words[L1Cards.at(cardL1[i])], L1Cards.at(cardL1[i]))
             );
@@ -116,7 +120,7 @@ contract WordToken is ERC721, VRFConsumerBase {
         }
 
         for (uint16 i = 0; i < 3; i++) {
-            _safeMint(requests[requestId], wordCards.length);
+            _safeMint(msg.sender, wordCards.length);
             wordCards.push(
                 Word(words[L2Cards.at(cardL2[i])], L2Cards.at(cardL2[i]))
             );
@@ -128,7 +132,7 @@ contract WordToken is ERC721, VRFConsumerBase {
         }
 
         for (uint16 i = 0; i < 2; i++) {
-            _safeMint(requests[requestId], wordCards.length);
+            _safeMint(msg.sender, wordCards.length);
             wordCards.push(
                 Word(words[L3Cards.at(cardL3[i])], L3Cards.at(cardL3[i]))
             );
@@ -138,6 +142,8 @@ contract WordToken is ERC721, VRFConsumerBase {
             if (availableCount[L3Cards.at(cardL3[i])] == 0)
                 L3Cards.remove(cardL3[i]);
         }
+
+        return true;
     }
 
     function newTournament() public returns (bool) {
