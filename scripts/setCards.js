@@ -9,7 +9,7 @@ function getWords() {
     fs.createReadStream('testwordlist.csv')
     .pipe(csv())
     .on('data', (row) => {
-        if(rowCount > 0)
+        if(rowCount > 35)
             words.push([rowCount, row["word"], parseInt(row["points"]), parseInt(row["count"]), parseInt(row["category"])]);
         rowCount++;
     })
@@ -19,7 +19,7 @@ function getWords() {
 }
 
 async function main() {
-    const contract = "0xe26C8a6B44579244dBEA6E85D24a972b783a6F96";
+    const contract = "0x0d2128f955b406676E13e24ff4019a6662714d25";
     const WordToken = await ethers.getContractFactory("WordToken");
     const wordToken = await WordToken.attach(contract);
 

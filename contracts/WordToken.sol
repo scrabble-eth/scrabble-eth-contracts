@@ -4,6 +4,13 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/utils/EnumerableSet.sol";
 import "@chainlink/contracts/src/v0.6/VRFConsumerBase.sol";
 
+import {
+    IWETHGateway
+} from "@aave/protocol-v2/contracts/misc/interfaces/IWETHGateway.sol";
+import {
+    IAToken
+} from '@aave/protocol-v2/contracts/interfaces/IAToken.sol';
+
 contract WordToken is ERC721, VRFConsumerBase {
     struct Word {
         string word;
@@ -36,6 +43,10 @@ contract WordToken is ERC721, VRFConsumerBase {
 
     mapping(bytes32 => address) private requests;
     mapping(address => uint256) private randomResult;
+    
+    address payable WETH;
+    address aWETH;
+    uint256 baseAmount;
 
     constructor(uint256 _seed)
         public
@@ -49,6 +60,27 @@ contract WordToken is ERC721, VRFConsumerBase {
         fee = 0.1 * 10**18; // 0.1 LINK
         seed = _seed;
         owner = msg.sender;
+        
+        WETH = 0xf8aC10E65F2073460aAD5f28E1EABE807DC287CF;
+        aWETH = 0x87b1f4cf9BD63f7BBD3eE1aD04E8F52540349347;
+    }
+    
+    function deposit(
+        address user,
+        uint256 amount
+    ) public returns (bool) {
+        IWETHGateway(WETH).depositETH{value: amount}(user, 0);
+        baseAmount = baseAmount + amount;
+        return true;
+    }
+
+    function withdraw(
+        uint256 amount,
+        address user
+    ) public returns (bool) {
+        IAToken(aWETH).approve(WETH, amount);
+        IWETHGateway(WETH).withdrawETH(amount, user);
+        return true;
     }
 
     function setCards(
@@ -73,10 +105,14 @@ contract WordToken is ERC721, VRFConsumerBase {
         return true;
     }
 
-    function buyPack() public returns (bytes32 requestId) {
+    function getRandom() public payable returns (bytes32 requestId) {
+        require(msg.value == 1000000000000000);
+        require(totalCount >= 10);
         requestId = requestRandomness(keyHash, fee, seed);
         requests[requestId] = msg.sender;
         mintCards();
+        
+        deposit(address(this), msg.value);
     }
 
     function expand(
@@ -148,10 +184,10 @@ contract WordToken is ERC721, VRFConsumerBase {
 
     function newTournament() public returns (bool) {
         require(msg.sender == owner);
-        require(currentPlayers.length() == 1);
-
-        address last = currentPlayers.at(0);
-        currentPlayers.remove(last);
+        if(currentPlayers.length() == 1) {
+            address last = currentPlayers.at(0);
+            currentPlayers.remove(last);
+        }
 
         inProgress = false;
         return true;
@@ -194,6 +230,18 @@ contract WordToken is ERC721, VRFConsumerBase {
         require(currentPlayers.length() == 1);
         return currentPlayers.at(0);
     }
+    
+    function awardFinalWinner(address payable winner) public returns (bool) {
+        require(msg.sender == owner);
+        require(inProgress == true);
+        require(currentPlayers.length() == 1);
+        require(currentPlayers.at(0) == winner);
+        
+        uint256 prize = IAToken(aWETH).balanceOf(address(this)) - baseAmount;
+        withdraw(prize, address(this));
+        winner.transfer(prize);
+        inProgress = false;
+    }
 
     function checkUsage(
         address player,
@@ -208,5 +256,8 @@ contract WordToken is ERC721, VRFConsumerBase {
         require(lastUsed[tokenId] + cooldown < timestamp);
 
         return true;
+    }
+
+    fallback() external payable {
     }
 }
